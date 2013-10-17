@@ -56,6 +56,11 @@ module.exports = {
         parser: './src/metadata/windows8_parser',
         url    : 'https://git-wip-us.apache.org/repos/asf?p=cordova-windows.git',
         version: '3.1.0'
+    },
+    'windows81':{
+        parser: './src/metadata/windows81_parser',
+        url    : 'https://git-wip-us.apache.org/repos/asf?p=cordova-windows.git',
+        version: '3.1.0'
     }
 };
 
