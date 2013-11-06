@@ -50,7 +50,9 @@ module.exports.check_requirements = function(project_root) {
     events.emit('log', 'Checking wp7 requirements...');
     var lib_path = path.join(util.libDirectory, 'wp', 'cordova', require('../../platforms').wp7.version, 'wp7');
     var custom_path = config.has_custom_path(project_root, 'wp7');
-    if (custom_path) lib_path = custom_path;
+    if (custom_path) {
+        lib_path = path.join(custom_path, 'wp7');
+    }
     var command = '"' + path.join(lib_path, 'bin', 'check_reqs') + '"';
     events.emit('verbose', 'Running "' + command + '" (output to follow)');
     var d = Q.defer();
@@ -152,7 +154,7 @@ module.exports.prototype = {
         }
     },
     // copies the app www folder into the wp7 project's www folder and updates the csproj file.
-    update_www:function() {
+    update_www:function(libDir) {
         var project_root = util.isCordova(this.wp7_proj_dir);
         var project_www = util.projectWww(project_root);
         // remove stock platform assets
@@ -165,15 +167,15 @@ module.exports.prototype = {
         this.copy_merges('wp7');
 
         // copy over wp7 lib's cordova.js
-        var lib_path = path.join(util.libDirectory, 'wp', 'cordova', require('../../platforms').wp7.version);
-        var custom_path = config.has_custom_path(project_root, 'wp7');
-        if (custom_path) lib_path = custom_path;
-        var cordovajs_path = path.join(lib_path, 'common', 'www', 'cordova.js');
+
+        var cordovajs_path = path.join(libDir, 'common', 'www', 'cordova.js');
         fs.writeFileSync(path.join(this.www_dir(), 'cordova.js'), fs.readFileSync(cordovajs_path, 'utf-8'), 'utf-8');
 
     },
     // updates the csproj file to explicitly list all www content.
     update_csproj:function() {
+        console.log('csproj');
+        console.log(this.csproj_path);
         var csproj_xml = xml.parseElementtreeSync(this.csproj_path);
         // remove any previous references to the www files
         var item_groups = csproj_xml.findall('ItemGroup');
@@ -248,15 +250,17 @@ module.exports.prototype = {
         } catch(e) {
             return Q.reject(e);
         }
-
         // trigger an event in case anyone needs to modify the contents of the www folder before we package it.
+        var that = this;
         var projectRoot = util.isCordova(process.cwd());
         var hooks = new hooker(projectRoot);
-        hooks.fire('pre_package', { wwwPath:this.www_dir() }, function(err) { });
-        this.update_csproj();
-        // TODO: Add overrides support? Why is this missing?
-        this.update_staging();
-        util.deleteSvnFolders(this.www_dir());
-        return Q();
+
+        return hooks.fire('pre_package', { wwwPath:this.www_dir() })
+        .then(function() {
+            that.update_csproj();
+            // TODO: Add overrides support? Why is this missing?
+            that.update_staging();
+            util.deleteSvnFolders(that.www_dir());
+        });
     }
 };
