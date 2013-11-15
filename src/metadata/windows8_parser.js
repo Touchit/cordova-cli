@@ -79,25 +79,34 @@ module.exports.prototype = {
         //Get manifest file
         var manifest = xml.parseElementtreeSync(this.manifest_path);
 
-        //Update app version
-        var version = config.version();
+        var version = this.fixConfigVersion(config);
+        var name = config.name();
+        var pkgName = config.packageName();
+        var author = config.author();
+
         var identityNode = manifest.find('.//Identity');
         if(identityNode) {
+            // Update app name in identity
+            var appIdName = identityNode['attrib']['Name'];
+            if (appIdName != pkgName) {
+                identityNode['attrib']['Name'] = pkgName;
+            }
+
+            // Update app version
             var appVersion = identityNode['attrib']['Version'];
             if(appVersion != version) {
                 identityNode['attrib']['Version'] = version;
             }
         }
 
-        // update name ( windows8 has it in the Application[@Id] and Application.VisualElements[@DisplayName])
-        var name = config.name();
+        // Update name (windows8 has it in the Application[@Id] and Application.VisualElements[@DisplayName])
         var app = manifest.find('.//Application');
         if(app) {
 
             var appId = app['attrib']['Id'];
 
-            if(appId != name) {
-                app['attrib']['Id'] = name;
+            if (appId != pkgName) {
+                app['attrib']['Id'] = pkgName;
             }
 
             var visualElems = manifest.find('.//VisualElements');
@@ -118,14 +127,31 @@ module.exports.prototype = {
                             ' with a <Application> node');
         }
 
+        // Update properties
+        var properties = manifest.find('.//Properties');
+        if (properties) {
+            var displayNameElement = properties.find('.//DisplayName');
+            if (displayNameElement) {
+                var displayName = displayNameElement.text;
+                if (displayName != name) {
+                    displayNameElement.text = name;
+                }
+            }
 
+            var publisherNameElement = properties.find('.//PublisherDisplayName');
+            if (publisherNameElement) {
+                var publisherName = publisherNameElement.text;
+                if (publisherName != author) {
+                    publisherNameElement.text = author;
+                }
+            }
+        }
 
+        // Update content (start page) element
+        this.config.content(config.content());
 
-         // Update content (start page) element
-         this.config.content(config.content());
-
-         //Write out manifest
-         fs.writeFileSync(this.manifest_path, manifest.write({indent: 4}), 'utf-8');
+        //Write out manifest
+        fs.writeFileSync(this.manifest_path, manifest.write({indent: 4}), 'utf-8');
 
     },
     // Returns the platform-specific www directory.
@@ -252,5 +278,18 @@ module.exports.prototype = {
         this.update_staging();
         util.deleteSvnFolders(this.www_dir());
         return Q();
+    },
+
+    // Cordova default version format is not compatible with Windows 8
+    fixConfigVersion: function (config) {
+        var version = config.version();
+        if (version.match(/^\d+\.\d+\.\d+$/)) {
+            return version.concat(".0");
+        }
+        else if (version.match(/^\d+\.\d+\.\d+\.\d+$/)) {
+            return version;
+        }
+        else
+            throw new Error("This version format is not recognized !");
     }
 };
