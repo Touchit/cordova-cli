@@ -47,7 +47,7 @@ module.exports = function windows8_parser(project) {
 
 // Returns a promise
 module.exports.check_requirements = function(project_root) {
-    events.emit('log', 'Checking windows8 requirements...');
+    events.emit('log', 'Checking Windows 8 requirements...');
     var lib_path = path.join(util.libDirectory, 'windows8', 'cordova',
                     require('../../platforms').windows8.version, 'windows8');
 
@@ -152,7 +152,6 @@ module.exports.prototype = {
 
         //Write out manifest
         fs.writeFileSync(this.manifest_path, manifest.write({indent: 4}), 'utf-8');
-
     },
     // Returns the platform-specific www directory.
     www_dir:function() {
@@ -176,7 +175,7 @@ module.exports.prototype = {
         return path.resolve(jsPath);
     },
 
-    // Replace the www dir with contents of platform_www and app www and updates the csproj file.
+    // Replace the www dir with contents of platform_www and app www and updates the jsproj file.
     update_www:function() {
         var projectRoot = util.isCordova(this.windows8_proj_dir);
         var app_www = util.projectWww(projectRoot);
@@ -189,6 +188,7 @@ module.exports.prototype = {
         shell.cp('-rf', path.join(app_www, '*'), this.www_dir());
 
         // Copy all files from merges directory.
+        this.copy_merges('windows');
         this.copy_merges('windows8');
 
         // Copy over stock platform www assets (cordova.js)

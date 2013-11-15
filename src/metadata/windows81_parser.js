@@ -78,33 +78,41 @@ module.exports.prototype = {
         //Get manifest file
         var manifest = xml.parseElementtreeSync(this.manifest_path);
 
-        //Update app version
-        var version = config.version();
+        var version = this.fixConfigVersion(config);
+        var name = config.name();
+        var pkgName = config.packageName();
+        var author = config.author();
+
         var identityNode = manifest.find('.//Identity');
-        if(identityNode) {
+        if (identityNode) {
+            // Update app name in identity
+            var appIdName = identityNode['attrib']['Name'];
+            if (appIdName != pkgName) {
+                identityNode['attrib']['Name'] = pkgName;
+            }
+
+            // Update app version
             var appVersion = identityNode['attrib']['Version'];
-            if(appVersion != version) {
+            if (appVersion != version) {
                 identityNode['attrib']['Version'] = version;
             }
         }
 
-        // update name ( windows81 has it in the Application[@Id] and Application.VisualElements[@DisplayName])
-        var name = config.name();
+        // Update name (windows8 has it in the Application[@Id] and Application.VisualElements[@DisplayName])
         var app = manifest.find('.//Application');
-        if(app) {
+        if (app) {
 
             var appId = app['attrib']['Id'];
 
-            if(appId != name) {
-                app['attrib']['Id'] = name;
+            if (appId != pkgName) {
+                app['attrib']['Id'] = pkgName;
             }
 
             var visualElems = manifest.find('.//VisualElements');
-            console.log(visualElems);
 
-            if(visualElems) {
+            if (visualElems) {
                 var displayName = visualElems['attrib']['DisplayName'];
-                if(displayName != name) {
+                if (displayName != name) {
                     visualElems['attrib']['DisplayName'] = name;
                 }
             }
@@ -118,15 +126,31 @@ module.exports.prototype = {
                             ' with a <Application> node');
         }
 
+        // Update properties
+        var properties = manifest.find('.//Properties');
+        if (properties) {
+            var displayNameElement = properties.find('.//DisplayName');
+            if (displayNameElement) {
+                var displayName = displayNameElement.text;
+                if (displayName != name) {
+                    displayNameElement.text = name;
+                }
+            }
 
+            var publisherNameElement = properties.find('.//PublisherDisplayName');
+            if (publisherNameElement) {
+                var publisherName = publisherNameElement.text;
+                if (publisherName != author) {
+                    publisherNameElement.text = author;
+                }
+            }
+        }
 
+        // Update content (start page) element
+        this.config.content(config.content());
 
-         // Update content (start page) element
-         this.config.content(config.content());
-
-         //Write out manifest
-         fs.writeFileSync(this.manifest_path, manifest.write({indent: 4}), 'utf-8');
-
+        //Write out manifest
+        fs.writeFileSync(this.manifest_path, manifest.write({ indent: 4 }), 'utf-8');
     },
     // Returns the platform-specific www directory.
     www_dir:function() {
@@ -143,26 +167,34 @@ module.exports.prototype = {
             shell.cp('-rf', overrides, this.www_dir());
         }
     },
-    // copies the app www folder into the windows81 project's www folder and updates the jsproj file.
-    update_www:function() {
-        var project_root = util.isCordova(this.windows81_proj_dir);
-        var project_www = util.projectWww(project_root);
-        // remove stock platform assets
-        shell.rm('-rf', this.www_dir());
-        // copy over all app www assets
-        shell.cp('-rf', project_www, this.windows81_proj_dir);
 
-        // copy all files from merges directories (generic first, then specific)
+    // Used for creating platform_www in projects created by older versions.
+    cordovajs_path: function (libDir) {
+        var jsPath = path.join(libDir, "template", 'www', 'cordova.js');
+        return path.resolve(jsPath);
+    },
+
+    // Replace the www dir with contents of platform_www and app www and updates the jsproj file.
+    update_www:function() {
+        var projectRoot = util.isCordova(this.windows81_proj_dir);
+        var app_www = util.projectWww(projectRoot);
+        var platform_www = path.join(this.windows81_proj_dir, 'platform_www');
+
+        // Clear the www dir
+        shell.rm('-rf', this.www_dir());
+        shell.mkdir(this.www_dir());
+        // Copy over all app www assets
+        shell.cp('-rf', path.join(app_www, '*'), this.www_dir());
+
+        // Copy all files from merges directory.
+        this.copy_merges('windows');
         this.copy_merges('windows81');
 
-        // copy over windows81 lib's cordova.js
-        var lib_path = path.join(util.libDirectory, 'windows81', 'cordova', require('../../platforms').windows81.version);
-        var custom_path = config.has_custom_path(project_root, 'windows81');
-        if (custom_path) lib_path = custom_path;
-        var cordovajs_path = path.join(lib_path, 'windows81', "template", 'www', 'cordova.js');
-        fs.writeFileSync(path.join(this.www_dir(), 'cordova.js'), fs.readFileSync(cordovajs_path, 'utf-8'), 'utf-8');
+        // Copy over stock platform www assets (cordova.js)
+        shell.cp('-rf', path.join(platform_www, '*'), this.www_dir());
         this.update_jsproj();
     },
+
     // updates the jsproj file to explicitly list all www content.
     update_jsproj:function() {
         var jsproj_xml = xml.parseElementtreeSync(this.jsproj_path);
@@ -242,9 +274,21 @@ module.exports.prototype = {
             return Q.reject(e);
         }
         // overrides (merges) are handled in update_www()
-        this.update_www();
         this.update_staging();
         util.deleteSvnFolders(this.www_dir());
         return Q();
+    },
+
+    // Cordova default version format is not compatible with Windows 8.1
+    fixConfigVersion: function (config) {
+        var version = config.version();
+        if (version.match(/^\d+\.\d+\.\d+$/)) {
+            return version.concat(".0");
+        }
+        else if (version.match(/^\d+\.\d+\.\d+\.\d+$/)) {
+            return version;
+        }
+        else
+            throw new Error("This version format is not recognized !");
     }
 };
